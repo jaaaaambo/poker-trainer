@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пуш-фолд тренажёр</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:#12151a; --panel:#1a1f27; --panel2:#222935; --line:#2e3744;
+  --text:#e8ecf1; --muted:#95a2b3;
+  --push:#6b3bb0; --raise:#e0574c; --fold:#6d7684;
+  --accent:#3fa96b; --bad:#d6493c;
+  --felt:#1d3b31; --feltline:#2f5b4a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+ font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+.wrap{max-width:860px;margin:0 auto;padding:14px 14px 40px}
+h1{font-size:19px;margin:4px 0 2px}
+.sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+label.f{font-size:12px;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+select,button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);
+ border-radius:8px;padding:9px 12px;cursor:pointer}
+select{min-width:190px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+ font-size:13.5px;cursor:pointer;user-select:none}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.table-wrap{position:relative;width:100%;max-width:560px;margin:0 auto}
+svg{width:100%;height:auto;display:block}
+.acts{display:flex;gap:10px;margin-top:16px}
+.acts button{flex:1;padding:15px 8px;font-size:15px;font-weight:600;border-radius:10px}
+.acts button.fold{background:#39414e}
+.acts button.raise{background:#a33f37}
+.acts button.push{background:#553093}
+.acts button:disabled{opacity:.45;cursor:default}
+.verdict{margin-top:14px;padding:12px 14px;border-radius:9px;font-size:14.5px}
+.verdict.ok{background:rgba(63,169,107,.14);border:1px solid rgba(63,169,107,.5)}
+.verdict.no{background:rgba(214,73,60,.14);border:1px solid rgba(214,73,60,.5)}
+.verdict b{font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:2px;margin-top:12px}
+.g{aspect-ratio:1;border-radius:3px;display:flex;align-items:center;justify-content:center;
+ font-size:9px;font-weight:600;color:#fff;overflow:hidden;position:relative}
+.g.me{outline:2.5px solid #fff;outline-offset:-1px;z-index:2}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+table.stat{width:100%;border-collapse:collapse;font-size:13.5px}
+table.stat td,table.stat th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+table.stat td.n,table.stat th.n{text-align:right}
+.big{font-size:26px;font-weight:700}
+.muted{color:var(--muted);font-size:12.5px}
+.hand-cards{display:flex;gap:7px;justify-content:center;margin:2px 0 4px}
+.pc{width:50px;height:70px;border-radius:7px;background:#f4f6f8;color:#111;display:flex;
+ flex-direction:column;align-items:center;justify-content:center;font-weight:700;line-height:1}
+.pc .r{font-size:25px}
+.pc .s{font-size:19px;margin-top:1px}
+.red{color:#c8322a}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--muted);font-size:13px}
+.note{font-size:12.5px;color:var(--muted);margin-top:8px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Пуш-фолд тренажёр</h1>
+<div class="sub">Данные: чарты SPR, 12bb, первым в банк. Проверка по конкретной ячейке чарта.</div>
+
+<div class="card" id="setup">
+  <div class="row" style="align-items:flex-end">
+    <div>
+      <label class="f">Формат и стадия</label>
+      <select id="cfg">
+        <option value="CHIPEV_EARLY">Классика · ранняя стадия (ChipEV)</option>
+        <option value="MTICM_MID">Классика · средняя стадия (MTICM)</option>
+        <option value="PKO50">PKO · баунти 50% стартового стека</option>
+        <option value="PKO100">PKO · баунти 100% стартового стека</option>
+        <option value="MIX">Всё вперемешку</option>
+      </select>
+    </div>
+  </div>
+  <div style="margin-top:12px">
+    <label class="f">Позиции</label>
+    <div class="chips" id="posChips"></div>
+  </div>
+  <div class="note">Все чарты рассчитаны на эффективный стек 12bb и ситуацию, когда до тебя все сфолдили.</div>
+</div>
+
+<div class="card">
+  <div class="table-wrap"><div id="tableSvg"></div></div>
+  <div class="hand-cards" id="cards"></div>
+  <div class="acts" id="acts"></div>
+  <div id="verdict"></div>
+  <div id="gridBox" class="hidden">
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span><i style="background:var(--push)"></i>Пуш</span>
+      <span><i style="background:var(--raise)"></i>Рейз 2bb</span>
+      <span><i style="background:var(--fold)"></i>Фолд</span>
+      <span><i style="background:linear-gradient(180deg,var(--raise) 50%,var(--push) 50%)"></i>Обе опции</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:baseline">
+    <div><span class="big" id="acc">—</span> <span class="muted">точность · <span id="cnt">0</span> рук</span></div>
+    <button id="reset" style="padding:6px 11px;font-size:13px">Сбросить статистику</button>
+  </div>
+  <details open><summary>По позициям и форматам</summary>
+    <table class="stat" id="statTable"></table>
+  </details>
+  <details><summary>Частые ошибки</summary>
+    <table class="stat" id="errTable"></table>
+  </details>
+</div>
+</div>
+<script>
+const CHARTS = {"CHIPEV_EARLY_12_BTN": "RRRRRPPPPPPPPRRRRPPPPPPPRRPPRPPPPRRRRFFPPPRPPPFFFFFFPPPPRPPFFFFFFPRRRFRPFFFFFFPRFFFFRPFFFFFPRFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFPFFFFFFFFFFPFPFFFFFFFFFFFP", "CHIPEV_EARLY_12_CO": "RRRRRPPPPPPPPPRPPPPRRRRFFFPPRPPPRFFFFFFPPPRPPFFFFFFFPPRRRPFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFRFFFFFFFFFFPFRFFFFFFFFFFFP", "CHIPEV_EARLY_12_HJ": "RRRRPPPPPPPPPPRPPPPRFFFFFFPPRPPPFFFFFFFPPRRPPFFFFFFFPRFFRPFFFFFFFPFFFFPFFFFFFFRFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFRFFFFFFFFPFFFRFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFP", "CHIPEV_EARLY_12_MP": "RRRXPPPPRPPRRPRPPPRFFFFFFFPPRPPRFFFFFFFPRFRPFFFFFFFFPFFFRFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "CHIPEV_EARLY_12_UTG": "RRRPPPPRRRRFFPRPPPRFFFFFFFPPRPPFFFFFFFFPFFRPFFFFFFFFRFFFXFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "MTICM_MID_12_BTN": "RRRRRPPPPPPPPRRRPPPPPPRRRFPPRPPPPRRRFFFPPPRPPPRFFFFFPPPPRPPFFFFFFPRFFFRPFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFPFFFFFFFFFFPFPFFFFFFFFFFFP", "MTICM_MID_12_CO": "RRRRRPPPPPPPPRRPPPPRRRFFFFPPRPPPRFFFFFFPPPRPPFFFFFFFPRFFRPFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFRFFFFFFFFFPFFRFFFFFFFFFFPFFFFFFFFFFFFFP", "MTICM_MID_12_HJ": "RRRRRPPPPPPPPRRPPPPRFFFFFFPPRPPPFFFFFFFPPRRPPFFFFFFFPRFFRPFFFFFFFPFFFFPFFFFFFFRFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFYFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFF", "MTICM_MID_12_MP": "RRRRPPPRRRRFFPRPPPPFFFFFFFPPRPPRFFFFFFFPRFRPFFFFFFFFRFFFRFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "MTICM_MID_12_UTG": "RRRPPPRRRRFFFRRPPPRFFFFFFFPRRPPFFFFFFFFPFFRPFFFFFFFFRFFFRFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO50_12_BTN": "PPPPPPPPPPPPPPPPPPPPPPPFFFPPPPPPFFFFFFFPPPPPPFFFFFFFPPPPPPFFFFFFFPPFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFPFFFFFFFFFFPFPFFFFFFFFFFFP", "PKO50_12_CO": "PPPPPPPPPPPPPPPPPPPFFFFFFFPPPPPPFFFFFFFPPPPPFFFFFFFFPPFFPFFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFF", "PKO50_12_HJ": "PPPPPPPPPPPPPPPPPPPFFFFFFFPPPPPFFFFFFFFPPFPPFFFFFFFFPFFFPFFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO50_12_MP": "PPPPPPPPPPPFFPPPPPFFFFFFFFPPPPPFFFFFFFFPPFPFFFFFFFFFPFFFPFFFFFFFFPFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO50_12_UTG": "PPPPPPPPFFFFFPPPPPFFFFFFFFPPPPFFFFFFFFFPFFPFFFFFFFFFPFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO100_12_BTN": "RRRPPPPPPPPPPPRPPPPPPPRRRFPPRPPPRFFFFFFPPPRPPRFFFFFFPPPPRPRFFFFFFPRFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFPFFFFFFFFFFPFPFFFFFFFFFFFP", "PKO100_12_CO": "RRPPPPPPPPPPPPRPPPPRRFFFFFPPRPPRFFFFFFFPPPRPRFFFFFFFPPFFPFFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFPFFFFFFPFFFFFPFFFFFFFPFFFFPFFFFFFFFPFFFPFFFFFFFFFPFFRFFFFFFFFFFPFFFFFFFFFFFFFP", "PKO100_12_HJ": "RRPPPPPPPPPPPPRPPPRFFFFFFFPPRPPRFFFFFFFPPFPRFFFFFFFFPFFFPFFFFFFFFPFFFFPFFFFFFFPFFFFFPFFFFFFYFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO100_12_MP": "RRRPPPPPPPPRFPRPPPRFFFFFFFPPRPRFFFFFFFFPRFRRFFFFFFFFPFFFPFFFFFFFFRFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "PKO100_12_UTG": "RRRPPPPRRRRFFPRPPPRFFFFFFFPPRRFFFFFFFFFPFFRFFFFFFFFFRFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFPFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"};
+const RANKS="AKQJT98765432";
+const POS=["UTG","MP","HJ","CO","BTN"];
+const CFGS=["CHIPEV_EARLY","MTICM_MID","PKO50","PKO100"];
+const CFGNAME={CHIPEV_EARLY:"Классика · ранняя (ChipEV)",MTICM_MID:"Классика · средняя (MTICM)",
+  PKO50:"PKO · баунти 50%",PKO100:"PKO · баунти 100%"};
+const SUITS=[["s","♠",0],["h","♥",1],["d","♦",1],["c","♣",0]];
+const ACTNAME={F:"Фолд",P:"Олл-ин",R:"Рейз 2bb"};
+
+function handName(i,j){
+  if(i===j) return RANKS[i]+RANKS[i];
+  if(i<j) return RANKS[i]+RANKS[j]+"s";
+  return RANKS[j]+RANKS[i]+"o";
+}
+function cellAt(key,i,j){ return CHARTS[key][i*13+j]; }
+function allowed(code){
+  if(code==="X") return ["P","R"];
+  if(code==="Y") return ["F","R"];
+  if(code==="Z") return ["F","P"];
+  return [code];
+}
+function chartHasRaise(key){ return CHARTS[key].indexOf("R")>=0 || CHARTS[key].indexOf("X")>=0 || CHARTS[key].indexOf("Y")>=0; }
+
+let state=null, selPos=new Set(POS);
+let stats=loadStats();
+
+function loadStats(){
+  try{ const s=localStorage.getItem("pfstats"); if(s) return JSON.parse(s); }catch(e){}
+  return {n:0,ok:0,by:{},err:{}};
+}
+function saveStats(){ try{ localStorage.setItem("pfstats",JSON.stringify(stats)); }catch(e){} }
+
+function randInt(n){ return Math.floor(Math.random()*n); }
+
+function dealHand(){
+  const i=randInt(13), j=randInt(13);
+  let c1,c2;
+  if(i===j){
+    const s=[...SUITS].sort(()=>Math.random()-.5);
+    c1=[RANKS[i],s[0]]; c2=[RANKS[i],s[1]];
+  } else if(i<j){
+    const s=SUITS[randInt(4)];
+    c1=[RANKS[i],s]; c2=[RANKS[j],s];
+  } else {
+    const s=[...SUITS].sort(()=>Math.random()-.5);
+    c1=[RANKS[j],s[0]]; c2=[RANKS[i],s[1]];
+  }
+  return {i,j,c1,c2};
+}
+
+function newSpot(){
+  const sel=document.getElementById("cfg").value;
+  const cfg = sel==="MIX" ? CFGS[randInt(CFGS.length)] : sel;
+  const poss=[...selPos]; if(!poss.length){ selPos=new Set(POS); poss.push(...POS); renderChips(); }
+  const pos=poss[randInt(poss.length)];
+  const key=cfg+"_12_"+pos;
+  const h=dealHand();
+  state={cfg,pos,key,...h,answered:false};
+  render();
+}
+
+function render(){
+  drawTable();
+  drawCards();
+  drawActs();
+  document.getElementById("verdict").innerHTML="";
+  document.getElementById("gridBox").classList.add("hidden");
+  drawStats();
+}
+
+function drawCards(){
+  const box=document.getElementById("cards");
+  box.innerHTML=[state.c1,state.c2].map(c=>
+    `<div class="pc"><div class="r ${c[1][2]?'red':''}">${c[0]}</div><div class="s ${c[1][2]?'red':''}">${c[1][1]}</div></div>`
+  ).join("");
+}
+
+function drawActs(){
+  const box=document.getElementById("acts");
+  const raise = chartHasRaise(state.key);
+  let h=`<button class="fold" data-a="F">Фолд</button>`;
+  if(raise) h+=`<button class="raise" data-a="R">Рейз 2bb</button>`;
+  h+=`<button class="push" data-a="P">Олл-ин 12bb</button>`;
+  box.innerHTML=h;
+  [...box.querySelectorAll("button")].forEach(b=>b.onclick=()=>answer(b.dataset.a));
+}
+
+function drawTable(){
+  const seats=["UTG","MP","HJ","CO","BTN","SB","BB"];
+  const idx=seats.indexOf(state.pos);
+  const pko=state.cfg.startsWith("PKO");
+  const cx=280, cy=170, rx=215, ry=125;
+  let s=`<svg viewBox="0 0 560 340" xmlns="http://www.w3.org/2000/svg">`;
+  s+=`<ellipse cx="${cx}" cy="${cy}" rx="${rx-18}" ry="${ry-18}" fill="var(--felt)" stroke="var(--feltline)" stroke-width="3"/>`;
+  s+=`<text x="${cx}" y="${cy-8}" text-anchor="middle" font-size="13" fill="#7f9c8f">блайнды 0.5 / 1 + анте</text>`;
+  s+=`<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="14" fill="#a9c6b7">банк 2.5bb</text>`;
+  // seat angles: start bottom (hero-ish) going clockwise
+  const n=seats.length;
+  for(let k=0;k<n;k++){
+    const ang = Math.PI/2 + (k-idx)*(2*Math.PI/n);
+    const x=cx+rx*Math.cos(ang), y=cy+ry*Math.sin(ang);
+    const isHero = k===idx;
+    const seat=seats[k];
+    const folded = k<idx;
+    const stack = isHero?12: (seat==="SB"||seat==="BB")? (10+randSeed(k,7)) : (8+randSeed(k,30));
+    const fill = isHero? "#2a4a3c" : folded? "#20242b" : "#262c36";
+    const stroke = isHero? "#4fbf86" : "#39414e";
+    s+=`<g>`;
+    s+=`<rect x="${x-44}" y="${y-22}" width="88" height="44" rx="9" fill="${fill}" stroke="${stroke}" stroke-width="${isHero?2.2:1.2}"/>`;
+    s+=`<text x="${x}" y="${y-5}" text-anchor="middle" font-size="12.5" font-weight="600" fill="${isHero?'#8fe3b7':folded?'#5b6472':'#c3ccd8'}">${seat}</text>`;
+    s+=`<text x="${x}" y="${y+11}" text-anchor="middle" font-size="12" fill="${folded?'#4d5563':'#96a3b4'}">${folded?"фолд":stack+" bb"}</text>`;
+    if(pko && !isHero && !folded){
+      s+=`<circle cx="${x+40}" cy="${y-18}" r="8" fill="#c9962e"/>`;
+      s+=`<text x="${x+40}" y="${y-14.5}" text-anchor="middle" font-size="9" font-weight="700" fill="#2a2008">B</text>`;
+    }
+    s+=`</g>`;
+  }
+  s+=`</svg>`;
+  document.getElementById("tableSvg").innerHTML=s;
+}
+let seedCache={};
+function randSeed(k,range){
+  const key=k+"_"+(state.i*13+state.j)+"_"+state.pos;
+  if(!(key in seedCache)) seedCache[key]=1+Math.floor(Math.random()*range);
+  return seedCache[key];
+}
+
+function answer(a){
+  if(state.answered) return;
+  state.answered=true;
+  const code=cellAt(state.key,state.i,state.j);
+  const ok=allowed(code).includes(a);
+  const hn=handName(state.i,state.j);
+  stats.n++; if(ok) stats.ok++;
+  const bk=state.cfg+"|"+state.pos;
+  stats.by[bk]=stats.by[bk]||{n:0,ok:0};
+  stats.by[bk].n++; if(ok) stats.by[bk].ok++;
+  if(!ok){
+    const ek=hn+"|"+state.pos+"|"+state.cfg;
+    stats.err[ek]=(stats.err[ek]||0)+1;
+  }
+  saveStats();
+  cloudSave(stats);
+  haptic(ok?"success":"error");
+
+  const right=allowed(code).map(c=>ACTNAME[c]).join(" или ");
+  let msg = ok
+    ? `<b>Верно.</b> ${hn} с ${state.pos} — ${right.toLowerCase()}.`
+    : `<b>Ошибка.</b> ${hn} с ${state.pos} — по чарту ${right.toLowerCase()}, ты выбрал «${ACTNAME[a]}».`;
+  if(code==="X"||code==="Y"||code==="Z"){
+    msg += `<div class="note">Ячейка закрашена наполовину: обе опции по ожиданию почти равны. Выбор — от оппонентов за тобой, стадии и динамики стола. Засчитываются оба ответа.</div>`;
+  }
+  msg += `<div class="note">${CFGNAME[state.cfg]} · 12bb</div>`;
+  const v=document.getElementById("verdict");
+  v.className="verdict "+(ok?"ok":"no");
+  v.innerHTML=msg;
+  drawGrid();
+  document.getElementById("gridBox").classList.remove("hidden");
+  const box=document.getElementById("acts");
+  box.innerHTML=`<button id="next" style="background:var(--accent);border-color:var(--accent);color:#fff">Следующая рука</button>`;
+  document.getElementById("next").onclick=newSpot;
+  drawStats();
+}
+
+function colorOf(code){
+  if(code==="P") return "var(--push)";
+  if(code==="R") return "var(--raise)";
+  if(code==="F") return "var(--fold)";
+  if(code==="X") return "linear-gradient(180deg,var(--raise) 50%,var(--push) 50%)";
+  if(code==="Y") return "linear-gradient(180deg,var(--raise) 50%,var(--fold) 50%)";
+  return "linear-gradient(180deg,var(--push) 50%,var(--fold) 50%)";
+}
+function drawGrid(){
+  const g=document.getElementById("grid");
+  let h="";
+  for(let i=0;i<13;i++) for(let j=0;j<13;j++){
+    const c=cellAt(state.key,i,j);
+    const me=(i===state.i&&j===state.j)?" me":"";
+    h+=`<div class="g${me}" style="background:${colorOf(c)}">${handName(i,j)}</div>`;
+  }
+  g.innerHTML=h;
+}
+
+function drawStats(){
+  const pct = stats.n? Math.round(100*stats.ok/stats.n) : null;
+  document.getElementById("acc").textContent = pct===null? "—" : pct+"%";
+  document.getElementById("cnt").textContent = stats.n;
+  const rows=Object.entries(stats.by).sort((a,b)=> (a[1].ok/a[1].n)-(b[1].ok/b[1].n));
+  let h=`<tr><th>Формат</th><th>Поз.</th><th class="n">Рук</th><th class="n">Точность</th></tr>`;
+  for(const [k,v] of rows){
+    const [cfg,pos]=k.split("|");
+    h+=`<tr><td>${CFGNAME[cfg]}</td><td>${pos}</td><td class="n">${v.n}</td><td class="n">${Math.round(100*v.ok/v.n)}%</td></tr>`;
+  }
+  if(!rows.length) h+=`<tr><td colspan="4" class="muted">Пока нет данных</td></tr>`;
+  document.getElementById("statTable").innerHTML=h;
+
+  const errs=Object.entries(stats.err).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  let e=`<tr><th>Рука</th><th>Поз.</th><th>Формат</th><th class="n">Ошибок</th></tr>`;
+  for(const [k,v] of errs){
+    const [hn,pos,cfg]=k.split("|");
+    e+=`<tr><td>${hn}</td><td>${pos}</td><td>${CFGNAME[cfg]}</td><td class="n">${v}</td></tr>`;
+  }
+  if(!errs.length) e+=`<tr><td colspan="4" class="muted">Пока нет ошибок</td></tr>`;
+  document.getElementById("errTable").innerHTML=e;
+}
+
+function renderChips(){
+  const box=document.getElementById("posChips");
+  box.innerHTML=POS.map(p=>`<div class="chip${selPos.has(p)?' on':''}" data-p="${p}">${p}</div>`).join("");
+  [...box.children].forEach(c=>c.onclick=()=>{
+    const p=c.dataset.p;
+    if(selPos.has(p)) selPos.delete(p); else selPos.add(p);
+    if(!selPos.size) selPos.add(p);
+    renderChips();
+  });
+}
+
+document.getElementById("cfg").onchange=newSpot;
+document.getElementById("reset").onclick=()=>{
+  stats={n:0,ok:0,by:{},err:{}}; saveStats(); cloudSave(stats); drawStats();
+};
+renderChips();
+newSpot();
+
+/* ---------- Telegram Mini App integration (безопасный фолбэк в обычном браузере) ---------- */
+const TG = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+function tgInit(){
+  if(!TG) return;
+  try{
+    TG.ready();
+    TG.expand();
+    if(TG.setHeaderColor) TG.setHeaderColor("#12151a");
+    if(TG.setBackgroundColor) TG.setBackgroundColor("#12151a");
+    if(TG.enableClosingConfirmation) TG.enableClosingConfirmation();
+  }catch(e){}
+}
+function haptic(kind){
+  if(!TG || !TG.HapticFeedback) return;
+  try{ TG.HapticFeedback.notificationOccurred(kind); }catch(e){}
+}
+
+/* Статистика: CloudStorage Telegram, если доступен, иначе localStorage.
+   CloudStorage асинхронный, поэтому пишем в оба места и читаем при старте. */
+function cloudSave(obj){
+  if(TG && TG.CloudStorage && TG.CloudStorage.setItem){
+    try{ TG.CloudStorage.setItem("pfstats", JSON.stringify(obj), ()=>{}); }catch(e){}
+  }
+}
+function cloudLoad(cb){
+  if(TG && TG.CloudStorage && TG.CloudStorage.getItem){
+    try{
+      TG.CloudStorage.getItem("pfstats", (err,val)=>{
+        if(!err && val){ try{ cb(JSON.parse(val)); return; }catch(e){} }
+        cb(null);
+      });
+      return;
+    }catch(e){}
+  }
+  cb(null);
+}
+
+tgInit();
+cloudLoad(function(remote){
+  if(remote && typeof remote.n === "number" && remote.n > (stats.n||0)){
+    stats = remote;
+    drawStats();
+  }
+});
+
+</script>
+</body>
+</html>
