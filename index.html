@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Пуш-фолд тренажёр</title>
+<title>No Time — покерный тренажёр</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
@@ -67,8 +67,8 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
 </head>
 <body>
 <div class="wrap">
-<h1>Пуш-фолд тренажёр</h1>
-<div class="sub">Данные: чарты SPR, 12bb, первым в банк. Проверка по конкретной ячейке чарта.</div>
+<h1>No Time</h1>
+<div class="sub">Тренировка решений на префлопе. Режим: пуш-фолд первым в банк, 12bb.</div>
 
 <div class="card" id="setup">
   <div class="row" style="align-items:flex-end">
@@ -185,7 +185,7 @@ function render(){
   drawTable();
   drawCards();
   drawActs();
-  document.getElementById("verdict").innerHTML="";
+  const vd=document.getElementById("verdict"); vd.innerHTML=""; vd.className="";
   document.getElementById("gridBox").classList.add("hidden");
   drawStats();
 }
